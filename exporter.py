@@ -173,6 +173,7 @@ def getIndices(controller, mesh):
         # With no index buffer, just generate a range
         return tuple(range(mesh.numIndices))
 
+
 def change_triangle_orient(list):
     for i, v in enumerate(list):
         if i % 3 == 0:
@@ -180,232 +181,8 @@ def change_triangle_orient(list):
             list[i - 1] = list[i - 2]
             list[i - 2] = temp
 
-def export_fbx(save_path, meshInputs, controller):
-    manager = pyrenderdoc.Extensions()
-
-    indices = getIndices(controller, meshInputs[0])
-    if not indices:
-        # manager.ErrorDialog("Current Draw Call lack of Vertex. ", "Error")
-        return
-
-    save_name = os.path.basename(os.path.splitext(save_path)[0])
-
-    idx_list = []
-    value_dict = defaultdict(list)
-    vertex_data = defaultdict(OrderedDict)
-    idx2newIdx = defaultdict(list)
-    newIdx = 0
-    for i, idx in enumerate(indices):
-
-        if idx not in idx2newIdx:
-            idx2newIdx[idx] = newIdx
-            newIdx = newIdx + 1
-
-        idx_list.append(idx2newIdx[idx])
-
-        for attr in meshInputs:
-
-            if idx not in vertex_data[attr.name]:
-                
-                # This is the data we're reading from. This would be good to cache instead of
-                # re-fetching for every attribute for every index
-                offset = attr.vertexByteOffset + attr.vertexByteStride * idx
-                data = controller.GetBufferData(attr.vertexResourceId, offset, attr.vertexByteStride)
-
-                # Get the value from the data
-                value = unpackData(attr.format, data)
-
-                vertex_data[attr.name][idx] = value
-
-            value_dict[attr.name].append(vertex_data[attr.name][idx])
-
-    # change_triangle_orient(idx_list)
-
-    idx_data = ",".join([str(v) for v in idx_list])
-    idx_len = len(idx_list)
-
-    ARGS = {"model_name": save_name}
-    vertices = [str(v) for values in vertex_data["in_POSITION0"].values() for v in values]
-    # vertices = [str(-v) if i == 0 else str(v) for values in vertex_data["in_POSITION0"].values() for i, v in enumerate(values)]
-    ARGS["vertices"] = ",".join(vertices)
-    ARGS["vertices_num"] = len(vertices)
-
-    polygons = [str(v) if i % 3 else str(-(v + 1)) for i, v in enumerate(idx_list, 1)]
-    ARGS["polygons"] = ",".join(polygons)
-    ARGS["polygons_num"] = len(polygons)
-
-    LayerElementNormal = ""
-    LayerElementNormalInsert = ""
-    has_normal = vertex_data.get("in_NORMAL0")
-
-    if has_normal:
-        normals = [str(values[v]) for values in value_dict["in_NORMAL0"] for v in [0,1,2]]
-
-        LayerElementNormal = """
-        LayerElementNormal: 0 {
-            Version: 101
-            Name: ""
-            MappingInformationType: "ByPolygonVertex"
-            ReferenceInformationType: "Direct"
-            Normals: *%(normals_num)s {
-                a: %(normals)s
-            }
-        }""" % {
-            "normals": ",".join(normals),
-            "normals_num": len(normals),
-        }
-        LayerElementNormalInsert = """
-            LayerElement:  {
-                Type: "LayerElementNormal"
-                TypedIndex: 0
-            }"""
-
-    LayerElementTangent = ""
-    LayerElementTangentInsert = ""
-    has_tangent = vertex_data.get("in_TANGENT0")
-    if has_tangent:
-        tangents = [str(v) for values in value_dict["in_TANGENT0"] for v in values]
-        LayerElementTangent = """
-        LayerElementTangent: 0 {
-            Version: 101
-            Name: ""
-            MappingInformationType: "ByPolygonVertex"
-            ReferenceInformationType: "Direct"
-            Tangents: *%(tangents_num)s {
-                a: %(tangents)s
-            } 
-        }""" % {
-            "tangents": ",".join(tangents),
-            "tangents_num": len(tangents),
-        }
-
-        LayerElementTangentInsert = """
-            LayerElement:  {
-                Type: "LayerElementTangent"
-                TypedIndex: 0
-            }"""
-
-    LayerElementColor = ""
-    LayerElementColorInsert = ""
-    has_color = vertex_data.get("in_COLOR0")
-    if has_color:
-        colors = [
-            str(v) if i % 4 else "1"
-            for values in value_dict["in_COLOR0"]
-            for i, v in enumerate(values, 1)
-        ]
-
-        LayerElementColor = """
-            LayerElementColor: 0 {
-                Version: 101
-                Name: "colorSet1"
-                MappingInformationType: "ByPolygonVertex"
-                ReferenceInformationType: "IndexToDirect"
-                Colors: *%(colors_num)s {
-                    a: %(colors)s
-                } 
-                ColorIndex: *%(colors_indices_num)s {
-                    a: %(colors_indices)s
-                } 
-            }""" % {
-            "colors": ",".join(colors),
-            "colors_num": len(colors),
-            "colors_indices": ",".join([str(i) for i in range(idx_len)]),
-            "colors_indices_num": idx_len,
-        }
-        LayerElementColorInsert = """
-            LayerElement:  {
-                Type: "LayerElementColor"
-                TypedIndex: 0
-            }"""
-
-    LayerElementUV = ""
-    LayerElementUVInsert = ""
-    has_uv = vertex_data.get("in_TEXCOORD0")
-    if has_uv:
-        uvs = [str(v) for values in vertex_data["in_TEXCOORD0"].values() for v in values]
-
-        LayerElementUV = """
-        LayerElementUV: 0 {
-            Version: 101
-            Name: ""
-            MappingInformationType: "ByPolygonVertex"
-            ReferenceInformationType: "IndexToDirect"
-            UV: *%(uvs_num)s {
-                a: %(uvs)s
-            } 
-            UVIndex: *%(uvs_indices_num)s {
-                a: %(uvs_indices)s
-            } 
-        }""" % {
-            "uvs": ",".join(uvs),
-            "uvs_num": len(uvs),
-            "uvs_indices": idx_data,
-            "uvs_indices_num": idx_len,
-        }
-
-        LayerElementUVInsert = """
-            LayerElement:  {
-                Type: "LayerElementUV"
-                TypedIndex: 0
-            }"""
-
-    LayerElementUV1 = ""
-    LayerElementUV1Insert = ""
-    has_uv1 = vertex_data.get("in_TEXCOORD1")
-    if has_uv1:
-        uvs = [str(v) for values in vertex_data["in_TEXCOORD1"].values() for v in values]
-
-        LayerElementUV1 = """
-        LayerElementUV: 1 {
-            Version: 101
-            Name: ""
-            MappingInformationType: "ByPolygonVertex"
-            ReferenceInformationType: "IndexToDirect"
-            UV: *%(uvs_num)s {
-                a: %(uvs)s
-            } 
-            UVIndex: *%(uvs_indices_num)s {
-                a: %(uvs_indices)s
-            } 
-        }""" % {
-            "uvs": ",".join(uvs),
-            "uvs_num": len(uvs),
-            "uvs_indices": idx_data,
-            "uvs_indices_num": idx_len,
-        }
-
-        LayerElementUV1Insert = """
-        Layer: 1 {
-            Version: 100
-            LayerElement:  {
-                Type: "LayerElementUV"
-                TypedIndex: 1
-            }
-        }"""
-
-    ARGS.update(
-        {
-            "LayerElementNormal": LayerElementNormal,
-            "LayerElementNormalInsert": LayerElementNormalInsert,
-            "LayerElementTangent": LayerElementTangent,
-            "LayerElementTangentInsert": LayerElementTangentInsert,
-            "LayerElementColor": LayerElementColor,
-            "LayerElementColorInsert": LayerElementColorInsert,
-            "LayerElementUV": LayerElementUV,
-            "LayerElementUVInsert": LayerElementUVInsert,
-            "LayerElementUV1": LayerElementUV1,
-            "LayerElementUV1Insert": LayerElementUV1Insert,
-        }
-    )
-
-    fbx = FBX_ASCII_TEMPLETE % ARGS
-
-    with open(save_path, "w") as f:
-        f.write(dedent(fbx).strip())
 
 class Exporter:
-
     def __init__(self, ctx: qrd.CaptureContext, eid: int, path: str, r: rd.ReplayController):
         self.ctx = ctx
         self.eid = eid
@@ -466,12 +243,243 @@ class Exporter:
 
         finalPath = self.path + "/drawcall_" + str(draw.drawcallId) + ".fbx"
         print(finalPath)
-        export_fbx(finalPath, meshInputs, self.r)
+        self.export_fbx(finalPath, meshInputs)
+
+    def export_fbx(self, save_path, meshInputs):
+        indices = getIndices(self.r, meshInputs[0])
+        if not indices:
+            self.result = "Current Draw Call lack of Vertex"
+            return
+
+        save_name = os.path.basename(os.path.splitext(save_path)[0])
+
+        idx_list = []
+        self.value_dict = defaultdict(list)
+        self.vertex_data = defaultdict(OrderedDict)
+        idx2newIdx = defaultdict(list)
+        newIdx = 0
+        for i, idx in enumerate(indices):
+
+            if idx not in idx2newIdx:
+                idx2newIdx[idx] = newIdx
+                newIdx = newIdx + 1
+
+            idx_list.append(idx2newIdx[idx])
+
+            for attr in meshInputs:
+
+                if idx not in self.vertex_data[attr.name]:
+                    
+                    # This is the data we're reading from. This would be good to cache instead of
+                    # re-fetching for every attribute for every index
+                    offset = attr.vertexByteOffset + attr.vertexByteStride * idx
+                    data = self.r.GetBufferData(attr.vertexResourceId, offset, attr.vertexByteStride)
+
+                    # Get the value from the data
+                    value = unpackData(attr.format, data)
+
+                    self.vertex_data[attr.name][idx] = value
+
+                self.value_dict[attr.name].append(self.vertex_data[attr.name][idx])
+
+        # change_triangle_orient(idx_list)
+
+        self.idx_data = ",".join([str(v) for v in idx_list])
+        self.idx_len = len(idx_list)
+
+        ARGS = {"model_name": save_name}
+        vertices = [str(v) for values in self.vertex_data["in_POSITION0"].values() for v in values]
+        # vertices = [str(-v) if i == 0 else str(v) for values in self.vertex_data["in_POSITION0"].values() for i, v in enumerate(values)]
+        ARGS["vertices"] = ",".join(vertices)
+        ARGS["vertices_num"] = len(vertices)
+
+        polygons = [str(v) if i % 3 else str(-(v + 1)) for i, v in enumerate(idx_list, 1)]
+        ARGS["polygons"] = ",".join(polygons)
+        ARGS["polygons_num"] = len(polygons)
+
+        self.build_normal()
+        self.build_tangent()
+        self.build_color()
+        self.build_uv0()
+        self.build_uv1()
+
+        ARGS.update(
+            {
+                "LayerElementNormal": self.LayerElementNormal,
+                "LayerElementNormalInsert": self.LayerElementNormalInsert,
+                "LayerElementTangent": self.LayerElementTangent,
+                "LayerElementTangentInsert": self.LayerElementTangentInsert,
+                "LayerElementColor": self.LayerElementColor,
+                "LayerElementColorInsert": self.LayerElementColorInsert,
+                "LayerElementUV": self.LayerElementUV,
+                "LayerElementUVInsert": self.LayerElementUVInsert,
+                "LayerElementUV1": self.LayerElementUV1,
+                "LayerElementUV1Insert": self.LayerElementUV1Insert,
+            }
+        )
+
+        fbx = FBX_ASCII_TEMPLETE % ARGS
+
+        with open(save_path, "w") as f:
+            f.write(dedent(fbx).strip())
+
+    def build_normal(self):
+        self.LayerElementNormal = ""
+        self.LayerElementNormalInsert = ""
+        has_normal = self.vertex_data.get("in_NORMAL0")
+        if has_normal:
+            normals = [str(values[v]) for values in self.value_dict["in_NORMAL0"] for v in [0,1,2]]
+
+            self.LayerElementNormal = """
+            LayerElementNormal: 0 {
+                Version: 101
+                Name: ""
+                MappingInformationType: "ByPolygonVertex"
+                ReferenceInformationType: "Direct"
+                Normals: *%(normals_num)s {
+                    a: %(normals)s
+                }
+            }""" % {
+                "normals": ",".join(normals),
+                "normals_num": len(normals),
+            }
+            self.LayerElementNormalInsert = """
+                LayerElement:  {
+                    Type: "LayerElementNormal"
+                    TypedIndex: 0
+                }"""
+    
+    def build_tangent(self):
+        self.LayerElementTangent = ""
+        self.LayerElementTangentInsert = ""
+        has_tangent = self.vertex_data.get("in_TANGENT0")
+        if has_tangent:
+            tangents = [str(v) for values in self.value_dict["in_TANGENT0"] for v in values]
+            self.LayerElementTangent = """
+            LayerElementTangent: 0 {
+                Version: 101
+                Name: ""
+                MappingInformationType: "ByPolygonVertex"
+                ReferenceInformationType: "Direct"
+                Tangents: *%(tangents_num)s {
+                    a: %(tangents)s
+                } 
+            }""" % {
+                "tangents": ",".join(tangents),
+                "tangents_num": len(tangents),
+            }
+
+            self.LayerElementTangentInsert = """
+                LayerElement:  {
+                    Type: "LayerElementTangent"
+                    TypedIndex: 0
+                }"""
+
+    def build_color(self):
+        self.LayerElementColor = ""
+        self.LayerElementColorInsert = ""
+        has_color = self.vertex_data.get("in_COLOR0")
+        if has_color:
+            colors = [
+                str(v) if i % 4 else "1"
+                for values in self.value_dict["in_COLOR0"]
+                for i, v in enumerate(values, 1)
+            ]
+
+            self.LayerElementColor = """
+                LayerElementColor: 0 {
+                    Version: 101
+                    Name: "colorSet1"
+                    MappingInformationType: "ByPolygonVertex"
+                    ReferenceInformationType: "IndexToDirect"
+                    Colors: *%(colors_num)s {
+                        a: %(colors)s
+                    } 
+                    ColorIndex: *%(colors_indices_num)s {
+                        a: %(colors_indices)s
+                    } 
+                }""" % {
+                "colors": ",".join(colors),
+                "colors_num": len(colors),
+                "colors_indices": ",".join([str(i) for i in range(self.idx_len)]),
+                "colors_indices_num": self.idx_len,
+            }
+            self.LayerElementColorInsert = """
+                LayerElement:  {
+                    Type: "LayerElementColor"
+                    TypedIndex: 0
+                }"""
+
+    def build_uv0(self):
+        self.LayerElementUV = ""
+        self.LayerElementUVInsert = ""
+        has_uv = self.vertex_data.get("in_TEXCOORD0")
+        if has_uv:
+            uvs = [str(v) for values in self.vertex_data["in_TEXCOORD0"].values() for v in values]
+
+            self.LayerElementUV = """
+            LayerElementUV: 0 {
+                Version: 101
+                Name: ""
+                MappingInformationType: "ByPolygonVertex"
+                ReferenceInformationType: "IndexToDirect"
+                UV: *%(uvs_num)s {
+                    a: %(uvs)s
+                } 
+                UVIndex: *%(uvs_indices_num)s {
+                    a: %(uvs_indices)s
+                } 
+            }""" % {
+                "uvs": ",".join(uvs),
+                "uvs_num": len(uvs),
+                "uvs_indices": self.idx_data,
+                "uvs_indices_num": self.idx_len,
+            }
+
+            self.LayerElementUVInsert = """
+                LayerElement:  {
+                    Type: "LayerElementUV"
+                    TypedIndex: 0
+                }"""
+    
+    def build_uv1(self):
+        self.LayerElementUV1 = ""
+        self.LayerElementUV1Insert = ""
+        has_uv1 = self.vertex_data.get("in_TEXCOORD1")
+        if has_uv1:
+            uvs = [str(v) for values in self.vertex_data["in_TEXCOORD1"].values() for v in values]
+
+            self.LayerElementUV1 = """
+            LayerElementUV: 1 {
+                Version: 101
+                Name: ""
+                MappingInformationType: "ByPolygonVertex"
+                ReferenceInformationType: "IndexToDirect"
+                UV: *%(uvs_num)s {
+                    a: %(uvs)s
+                } 
+                UVIndex: *%(uvs_indices_num)s {
+                    a: %(uvs_indices)s
+                } 
+            }""" % {
+                "uvs": ",".join(uvs),
+                "uvs_num": len(uvs),
+                "uvs_indices": self.idx_data,
+                "uvs_indices_num": self.idx_len,
+            }
+
+            self.LayerElementUV1Insert = """
+            Layer: 1 {
+                Version: 100
+                LayerElement:  {
+                    Type: "LayerElementUV"
+                    TypedIndex: 1
+                }
+            }"""
 
     def get_result(self):
         return self.result
 
-# async
 def export_wrap(ctx: qrd.CaptureContext, eid: int, save_path: str, finished_callback):
     # define a local function that wraps the detail of needing to invoke back/forth onto replay thread
     def _replay_callback(r: rd.ReplayController):
@@ -481,12 +489,3 @@ def export_wrap(ctx: qrd.CaptureContext, eid: int, save_path: str, finished_call
         ctx.Extensions().GetMiniQtHelper().InvokeOntoUIThread(lambda: finished_callback(exporter.get_result()))
 
     ctx.Replay().AsyncInvoke('fbx_exporter', _replay_callback)
-
-# block
-def export_wrap_block(ctx: qrd.CaptureContext, eid: int, save_path: str, finished_callback):
-
-    def _replay_callback(r: rd.ReplayController):
-        exporter = Exporter(ctx, eid, save_path, r)
-        finished_callback(exporter.get_result())
-
-    ctx.Replay().BlockInvoke(_replay_callback)

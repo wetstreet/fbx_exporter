@@ -27,7 +27,7 @@ import qrenderdoc as qrd
 from . import window
     
 extiface_version = ''
-    
+
 def window_callback(ctx: qrd.CaptureContext, data):
     win = window.get_window(ctx, extiface_version)
 
@@ -47,3 +47,5 @@ def register(version: str, ctx: qrd.CaptureContext):
 
 def unregister():
     print("Unregistrating FBX Mesh Exporter extension")
+
+    window.close_window()

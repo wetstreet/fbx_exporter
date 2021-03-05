@@ -27,6 +27,7 @@ import renderdoc as rd
 from typing import Optional
 from . import exporter
 
+
 class Window(qrd.CaptureViewer):
     def __init__(self, ctx: qrd.CaptureContext, version: str):
         super().__init__()
@@ -97,7 +98,7 @@ class Window(qrd.CaptureViewer):
             self.ctx.Extensions().MessageDialog("not a valid eventId", "Error")
             return
             
-        export_wrap(self.ctx, eventID, self.save_path, lambda results: self.finish_export(results))
+        exporter.export_wrap(self.ctx, eventID, self.save_path, lambda results: self.finish_export(results))
 
     def finish_export(self, result):
         if result:
@@ -108,14 +109,25 @@ class Window(qrd.CaptureViewer):
 
 
 cur_window: Optional[Window] = None
-    
+
+
 def window_closed():
     global cur_window
 
     if cur_window is not None:
+        cur_window.ctx.Extensions().GetMiniQtHelper().CloseToplevelWidget(cur_window.topWindow)
         cur_window.ctx.RemoveCaptureViewer(cur_window)
 
     cur_window = None
+
+
+def close_window():
+    global cur_window
+    
+    if cur_window is not None:
+        cur_window.ctx.Extensions().GetMiniQtHelper().CloseToplevelWidget(cur_window.topWindow)
+        cur_window = None
+
 
 def get_window(ctx, version):
     global cur_window
