@@ -183,13 +183,14 @@ def change_triangle_orient(list):
 
 
 class Exporter:
-    def __init__(self, ctx: qrd.CaptureContext, startDrawcallId: int, endDrawcallId: int, path: str, r: rd.ReplayController):
+    def __init__(self, ctx, startDrawcallId, endDrawcallId, is_save_texture, path, r):
         self.ctx = ctx
-        # self.eid = eid
         self.path = path
         self.r = r
+        self.is_save_texture = is_save_texture
 
         self.result = None
+        self.textures = self.r.GetTextures()
 
         root_drawcalls = self.r.GetDrawcalls()
         drawcalls = {}
@@ -214,10 +215,52 @@ class Exporter:
 
         for drawcallId in range(startDrawcallId, endDrawcallId + 1):
             self.export_by_drawcall(drawcalls[drawcallId])
+            
+    def get_tex(self, resid: rd.ResourceId):
+        for t in self.textures:
+            if t.resourceId == resid:
+                return t
+        return None
+
+    def save_texture(self, resourceId):
+        texsave = rd.TextureSave()
+        texsave.resourceId = resourceId
+        texsave.alpha = rd.AlphaMapping.Preserve
+        texsave.destType = rd.FileType.PNG
+
+        tex_name = self.ctx.GetResource(resourceId).name
+
+        dir_path = self.path + "/Textures/"
+
+        if not os.path.exists(dir_path):
+            os.mkdir(dir_path)
+
+        texture = self.get_tex(resourceId)
+        if texture.arraysize > 1:
+            for index in range(texture.arraysize):
+                texsave.slice.sliceIndex = index
+                
+                filename = dir_path + tex_name + "_" + str(index) + ".png"
+                result = self.r.SaveTexture(texsave, filename)
+                print("save texture," + filename + ",result="+str(result))
+        else:
+            filename = dir_path + tex_name + ".png"
+            result = self.r.SaveTexture(texsave, filename)
+            print("save texture," + filename + ",result="+str(result))
+
+    def save_textures(self, state):
+        resourceArray = state.GetReadOnlyResources(rd.ShaderStage.Fragment)
+        for i, boundResource in enumerate(resourceArray):
+            resourceId = boundResource.resources[0].resourceId
+            if resourceId != rd.ResourceId.Null():
+                self.save_texture(resourceId)
         
     def export_by_drawcall(self, draw):
         self.r.SetFrameEvent(draw.eventId, False)
         state = self.r.GetPipelineState()
+
+        if self.is_save_texture:
+            self.save_textures(state)
 
         # Get the index & vertex buffers, and fixed vertex inputs
         ib = state.GetIBuffer()
@@ -497,10 +540,10 @@ class Exporter:
     def get_result(self):
         return self.result
 
-def export_wrap(ctx: qrd.CaptureContext, startDrawcallId: int, endDrawcallId: int, save_path: str, finished_callback):
+def export_wrap(ctx, startDrawcallId, endDrawcallId, is_save_texture, save_path, finished_callback):
     # define a local function that wraps the detail of needing to invoke back/forth onto replay thread
     def _replay_callback(r: rd.ReplayController):
-        exporter = Exporter(ctx, startDrawcallId, endDrawcallId, save_path, r)
+        exporter = Exporter(ctx, startDrawcallId, endDrawcallId, is_save_texture, save_path, r)
 
         # Invoke back onto the UI thread to display the results
         ctx.Extensions().GetMiniQtHelper().InvokeOntoUIThread(lambda: finished_callback(exporter.get_result()))

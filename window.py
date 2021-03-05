@@ -44,25 +44,35 @@ class Window(qrd.CaptureViewer):
         vert = self.mqt.CreateVerticalContainer()
         self.mqt.AddWidget(self.topWindow, vert)
         
-        self.startDrawcallLabel = self.mqt.CreateLabel()
-        self.mqt.SetWidgetText(self.startDrawcallLabel, "Start DrawCall ID:")
+        startDrawcallLabel = self.mqt.CreateLabel()
+        self.mqt.SetWidgetText(startDrawcallLabel, "Start DrawCall ID:")
         self.startDrawcallTextBox = self.mqt.CreateTextBox(True, None)
-        self.endDrawcallLabel = self.mqt.CreateLabel()
-        self.mqt.SetWidgetText(self.endDrawcallLabel, "End DrawCall ID:")
+        endDrawcallLabel = self.mqt.CreateLabel()
+        self.mqt.SetWidgetText(endDrawcallLabel, "End DrawCall ID:")
         self.endDrawcallTextBox = self.mqt.CreateTextBox(True, None)
         horiz = self.mqt.CreateHorizontalContainer()
-        self.mqt.AddWidget(horiz, self.startDrawcallLabel)
+        self.mqt.AddWidget(horiz, startDrawcallLabel)
         self.mqt.AddWidget(horiz, self.startDrawcallTextBox)
-        self.mqt.AddWidget(horiz, self.endDrawcallLabel)
+        self.mqt.AddWidget(horiz, endDrawcallLabel)
         self.mqt.AddWidget(horiz, self.endDrawcallTextBox)
         self.mqt.AddWidget(vert, horiz)
 
+        saveTextureLabel = self.mqt.CreateLabel()
+        self.mqt.SetWidgetText(saveTextureLabel, "Save Texture:")
+        self.saveTextureCheckBox = self.mqt.CreateCheckbox(None)
+        horiz = self.mqt.CreateHorizontalContainer()
+        self.mqt.AddWidget(horiz, saveTextureLabel)
+        self.mqt.AddWidget(horiz, self.mqt.CreateSpacer(True))
+        self.mqt.AddWidget(horiz, self.saveTextureCheckBox)
+        self.mqt.AddWidget(vert, horiz)
+
         self.folderLabel = self.mqt.CreateLabel()
-        self.folderButton = self.mqt.CreateButton(lambda c, w, d: self.select_folder())
-        self.mqt.SetWidgetText(self.folderButton, "Select Folder")
+        folderButton = self.mqt.CreateButton(lambda c, w, d: self.select_folder())
+        self.mqt.SetWidgetText(folderButton, "Select Folder")
         horiz = self.mqt.CreateHorizontalContainer()
         self.mqt.AddWidget(horiz, self.folderLabel)
-        self.mqt.AddWidget(horiz, self.folderButton)
+        self.mqt.AddWidget(horiz, self.mqt.CreateSpacer(True))
+        self.mqt.AddWidget(horiz, folderButton)
         self.mqt.AddWidget(vert, horiz)
 
         self.exportButton = self.mqt.CreateButton(lambda c, w, d: self.start_export())
@@ -105,7 +115,8 @@ class Window(qrd.CaptureViewer):
             self.ctx.Extensions().MessageDialog("not a valid drawcall id", "Error")
             return
             
-        exporter.export_wrap(self.ctx, startDrawcallId, endDrawcallId, self.save_path, lambda results: self.finish_export(results))
+        is_save_texture = self.mqt.IsWidgetChecked(self.saveTextureCheckBox)
+        exporter.export_wrap(self.ctx, startDrawcallId, endDrawcallId, is_save_texture, self.save_path, lambda results: self.finish_export(results))
 
     def finish_export(self, result):
         if result:
