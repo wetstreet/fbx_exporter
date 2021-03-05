@@ -22,6 +22,7 @@
 # THE SOFTWARE.
 ###############################################################################
 
+import os
 import qrenderdoc as qrd
 import renderdoc as rd
 from typing import Optional
@@ -43,12 +44,17 @@ class Window(qrd.CaptureViewer):
         vert = self.mqt.CreateVerticalContainer()
         self.mqt.AddWidget(self.topWindow, vert)
         
-        self.eventLabel = self.mqt.CreateLabel()
-        self.mqt.SetWidgetText(self.eventLabel, "EventID:")
-        self.eventTextBox = self.mqt.CreateTextBox(True, None)
+        self.startDrawcallLabel = self.mqt.CreateLabel()
+        self.mqt.SetWidgetText(self.startDrawcallLabel, "Start DrawCall ID:")
+        self.startDrawcallTextBox = self.mqt.CreateTextBox(True, None)
+        self.endDrawcallLabel = self.mqt.CreateLabel()
+        self.mqt.SetWidgetText(self.endDrawcallLabel, "End DrawCall ID:")
+        self.endDrawcallTextBox = self.mqt.CreateTextBox(True, None)
         horiz = self.mqt.CreateHorizontalContainer()
-        self.mqt.AddWidget(horiz, self.eventLabel)
-        self.mqt.AddWidget(horiz, self.eventTextBox)
+        self.mqt.AddWidget(horiz, self.startDrawcallLabel)
+        self.mqt.AddWidget(horiz, self.startDrawcallTextBox)
+        self.mqt.AddWidget(horiz, self.endDrawcallLabel)
+        self.mqt.AddWidget(horiz, self.endDrawcallTextBox)
         self.mqt.AddWidget(vert, horiz)
 
         self.folderLabel = self.mqt.CreateLabel()
@@ -85,26 +91,27 @@ class Window(qrd.CaptureViewer):
 
     def refresh(self):
         self.mqt.SetWidgetEnabled(self.exportButton, self.save_path is not None)
-        self.mqt.SetWidgetText(self.folderLabel, "Folder:" + str(self.save_path))
+        self.mqt.SetWidgetText(self.folderLabel, "Destination Folder:" + str(self.save_path))
 
     def start_export(self):
         try:
-            eventID = int(self.mqt.GetWidgetText(self.eventTextBox))
+            startDrawcallId = int(self.mqt.GetWidgetText(self.startDrawcallTextBox))
+            endDrawcallId = int(self.mqt.GetWidgetText(self.endDrawcallTextBox))
         except:
             self.ctx.Extensions().MessageDialog("not a valid number", "Error")
             return
 
-        if eventID < 0:
-            self.ctx.Extensions().MessageDialog("not a valid eventId", "Error")
+        if startDrawcallId < 0 or endDrawcallId < 0:
+            self.ctx.Extensions().MessageDialog("not a valid drawcall id", "Error")
             return
             
-        exporter.export_wrap(self.ctx, eventID, self.save_path, lambda results: self.finish_export(results))
+        exporter.export_wrap(self.ctx, startDrawcallId, endDrawcallId, self.save_path, lambda results: self.finish_export(results))
 
     def finish_export(self, result):
         if result:
             self.ctx.Extensions().MessageDialog(result, "Failed")
         else:
-            self.ctx.Extensions().MessageDialog("fbx saved", "Congradualtion!~")
+            self.ctx.Extensions().MessageDialog("Export Finished", "Congradualtion!~")
             os.startfile(self.save_path)
 
 

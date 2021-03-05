@@ -183,23 +183,40 @@ def change_triangle_orient(list):
 
 
 class Exporter:
-    def __init__(self, ctx: qrd.CaptureContext, eid: int, path: str, r: rd.ReplayController):
+    def __init__(self, ctx: qrd.CaptureContext, startDrawcallId: int, endDrawcallId: int, path: str, r: rd.ReplayController):
         self.ctx = ctx
-        self.eid = eid
+        # self.eid = eid
         self.path = path
         self.r = r
 
         self.result = None
 
-        self.export_by_event()
-        
-    def export_by_event(self):
-        draw = self.ctx.GetDrawcall(self.eid)
-        if draw is None:
-            self.result = "not a valid eventID"
+        root_drawcalls = self.r.GetDrawcalls()
+        drawcalls = {}
+        for draw in root_drawcalls:
+            if len(draw.children) > 0:
+                for child in draw.children:
+                    drawcalls[child.drawcallId] = child
+            else:
+                drawcalls[draw.drawcallId] = draw
+
+        try:
+            drawcalls[startDrawcallId]
+        except:
+            self.result = "not a valid start drawcall id"
             return
 
-        self.r.SetFrameEvent(self.eid, False)
+        try:
+            drawcalls[endDrawcallId]
+        except:
+            self.result = "not a valid end drawcall id"
+            return
+
+        for drawcallId in range(startDrawcallId, endDrawcallId + 1):
+            self.export_by_drawcall(drawcalls[drawcallId])
+        
+    def export_by_drawcall(self, draw):
+        self.r.SetFrameEvent(draw.eventId, False)
         state = self.r.GetPipelineState()
 
         # Get the index & vertex buffers, and fixed vertex inputs
@@ -480,10 +497,10 @@ class Exporter:
     def get_result(self):
         return self.result
 
-def export_wrap(ctx: qrd.CaptureContext, eid: int, save_path: str, finished_callback):
+def export_wrap(ctx: qrd.CaptureContext, startDrawcallId: int, endDrawcallId: int, save_path: str, finished_callback):
     # define a local function that wraps the detail of needing to invoke back/forth onto replay thread
     def _replay_callback(r: rd.ReplayController):
-        exporter = Exporter(ctx, eid, save_path, r)
+        exporter = Exporter(ctx, startDrawcallId, endDrawcallId, save_path, r)
 
         # Invoke back onto the UI thread to display the results
         ctx.Extensions().GetMiniQtHelper().InvokeOntoUIThread(lambda: finished_callback(exporter.get_result()))
