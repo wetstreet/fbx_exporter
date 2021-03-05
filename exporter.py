@@ -191,6 +191,7 @@ class Exporter:
 
         self.result = None
         self.textures = self.r.GetTextures()
+        self.saved_textures = set()
 
         root_drawcalls = self.r.GetDrawcalls()
         drawcalls = {}
@@ -239,7 +240,6 @@ class Exporter:
         if texture.arraysize > 1:
             for index in range(texture.arraysize):
                 texsave.slice.sliceIndex = index
-                
                 filename = dir_path + tex_name + "_" + str(index) + ".png"
                 result = self.r.SaveTexture(texsave, filename)
                 print("save texture," + filename + ",result="+str(result))
@@ -249,11 +249,12 @@ class Exporter:
             print("save texture," + filename + ",result="+str(result))
 
     def save_textures(self, state):
-        resourceArray = state.GetReadOnlyResources(rd.ShaderStage.Fragment)
+        resourceArray = state.GetReadOnlyResources(rd.ShaderStage.Fragment, True)
         for i, boundResource in enumerate(resourceArray):
             resourceId = boundResource.resources[0].resourceId
-            if resourceId != rd.ResourceId.Null():
+            if resourceId != rd.ResourceId.Null() and resourceId not in self.saved_textures:
                 self.save_texture(resourceId)
+                self.saved_textures.add(resourceId)
         
     def export_by_drawcall(self, draw):
         self.r.SetFrameEvent(draw.eventId, False)
