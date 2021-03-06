@@ -255,10 +255,54 @@ class Exporter:
             if resourceId != rd.ResourceId.Null() and resourceId not in self.saved_textures:
                 self.save_texture(resourceId)
                 self.saved_textures.add(resourceId)
+
+    def export_constants(self, state, stage):
+        shader = state.GetShader(stage)
+        bind = state.GetBindpointMapping(stage)
+
+        for i in range(len(bind.constantBlocks)):
+            if bind.constantBlocks[i].arraySize <= 1:
+                cb = state.GetConstantBuffer(stage, i, 0)
+                cb_vars = self.r.GetCBufferVariableContents(state.GetGraphicsPipelineObject(), shader,
+                                                            state.GetShaderEntryPoint(stage), i,
+                                                            cb.resourceId, cb.byteOffset, cb.byteSize)
+
+                cb_json = {}
+                for v in cb_vars:
+                    if len(v.members) > 0:
+                        value_list = []
+                        for i, m in enumerate(v.members):
+                            if m.type == rd.VarType.Float:
+                                row = ''
+                                for c in range(m.columns):
+                                    row += "%.5f" % m.value.f32v[c]
+                                    if c < m.columns - 1:
+                                        row += ', '
+                                value_list.append(row)
+                        cb_json[v.name] = value_list
+                    else:
+                        value = ''
+                        if v.type == rd.VarType.Float:
+                            for c in range(v.columns):
+                                value += "%.5f" % v.value.f32v[c]
+                                if c < v.columns - 1:
+                                    value += ', '
+                        cb_json[v.name] = value
+                    
+                json_str = json.dumps(cb_json, indent=4)
+                if stage == rd.ShaderStage.Vertex:
+                    name = "vertex"
+                elif stage == rd.ShaderStage.Fragment:
+                    name = "fragment"
+                with open(self.path + "/" + name + ".json", "w") as f:
+                    f.write(json_str)
         
     def export_by_drawcall(self, draw):
         self.r.SetFrameEvent(draw.eventId, False)
         state = self.r.GetPipelineState()
+
+        # self.export_constants(state, rd.ShaderStage.Vertex)
+        # self.export_constants(state, rd.ShaderStage.Fragment)
 
         if self.is_save_texture:
             self.save_textures(state)
